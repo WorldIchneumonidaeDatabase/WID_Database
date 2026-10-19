@@ -89,13 +89,40 @@
               class="rounded-lg px-3 py-2 ring-1 ring-base-border bg-base-foreground text-base-content"
             >
               <option value="">All</option>
-              <option
-                v-for="r in regions"
-                :key="r"
-                :value="r"
+              <!-- the areas of the literature first, set apart from the regions -->
+              <optgroup
+                v-if="literatureAreas.length"
+                :label="`Areas of the literature`"
               >
-                {{ r }}
-              </option>
+                <option
+                  v-for="r in literatureAreas"
+                  :key="r"
+                  :value="r"
+                >
+                  {{ `${r} (sensu ${areaSource(r)})` }}
+                </option>
+              </optgroup>
+              <optgroup
+                v-if="literatureAreas.length"
+                :label="`${regionLabel}s`"
+              >
+                <option
+                  v-for="r in plainRegions"
+                  :key="r"
+                  :value="r"
+                >
+                  {{ r }}
+                </option>
+              </optgroup>
+              <template v-else>
+                <option
+                  v-for="r in regions"
+                  :key="r"
+                  :value="r"
+                >
+                  {{ r }}
+                </option>
+              </template>
             </select>
           </label>
           <label
@@ -150,6 +177,27 @@
             </button>
           </div>
         </div>
+        <!-- inset map of the areas of the literature (e.g. North / South Italy sensu Scaramozzino) -->
+        <AreaInset
+          v-if="insetAreas(country).length"
+          class="mt-4"
+          :country="country"
+          :selected="region"
+          @select="region = $event"
+        />
+
+        <!-- what the areas of the literature mean (e.g. North / South Italy sensu Scaramozzino) -->
+        <div
+          v-if="shownAreaNotes.length"
+          class="mt-3 rounded-lg border-l-4 border-secondary-color bg-base-foreground px-3 py-2 text-sm text-base-content/80"
+        >
+          <p
+            v-for="n in shownAreaNotes"
+            :key="n"
+          >
+            <span class="font-semibold">{{ n.split(':')[0] }}:</span>{{ n.slice(n.indexOf(':') + 1) }}.
+          </p>
+        </div>
         <p class="mt-2 text-xs text-base-content/55">
           Downloads contain the whole checklist of {{ place }}<template v-if="checklist.hasCounties"> ({{ byCounty ? `by ${regionLabel.toLowerCase()} and county` : `by ${regionLabel.toLowerCase()}` }}, as shown)</template>, not only what is filtered on screen. Generated live from WID on {{ today }}.
           <template v-if="citationsLoading"> Adding page numbers to the citations…</template>
@@ -167,9 +215,23 @@
           :by-county="byCounty"
           :focus="focus"
           :place-word="regionLabel.toLowerCase()"
+          :gaps="gaps"
           @select-region="region = $event"
           @select-county="selectCounty"
           @clear-focus="focus = ''"
+        />
+
+        <!-- charts: subfamilies, species × region, discovery, literature, literature vs specimens -->
+        <ChecklistInsights
+          class="mt-6"
+          :checklist="regional"
+          :rows="rowsInRegion(rows, regionsOf(country, region), country)"
+          :citations="citations"
+          :country="country"
+          :place="place"
+          :place-word="regionLabel.toLowerCase()"
+          @goto-subfamily="gotoSubfamily"
+          @download="downloadInsight"
         />
 
         <!-- the checklist -->
@@ -184,7 +246,10 @@
           :key="sf.name"
           class="mt-8"
         >
-          <h2 class="text-sm font-bold uppercase tracking-wider text-primary-color dark:text-secondary-color">
+          <h2
+            :id="`sf-${sf.name}`"
+            class="scroll-mt-24 text-sm font-bold uppercase tracking-wider text-primary-color dark:text-secondary-color"
+          >
             {{ sf.name }}
           </h2>
           <ul class="mt-3 flex flex-col gap-3">
@@ -233,7 +298,8 @@
                     class="no-underline cursor-help"
                   >{{ seg.text }}</abbr><span
                     v-else-if="seg.place"
-                    :class="{ 'bg-secondary-color/25 rounded px-0.5': region && seg.text === region }"
+                    :class="{ 'bg-secondary-color/25 rounded px-0.5': region && regionsOf(country, region).includes(seg.text), 'underline decoration-dotted cursor-help': areaNote(country, seg.text) }"
+                    :title="areaNote(country, seg.text) || undefined"
                   >{{ seg.text }}</span><template v-else>{{ seg.text }}</template></template>.
                 </p>
               </li>
@@ -266,7 +332,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { makeAPIRequest } from '@/utils/request'
 import PageHeader from './components/Home/PageHeader.vue'
 import ChecklistMap from './components/Checklist/ChecklistMap.vue'
-import { buildChecklist, filterChecklist, toCSV, toText, toRTF, download, isSpecimen, countySuffixFor, restrictToRegion, rowsInRegion, countiesIn } from './components/Checklist/checklist.js'
+import AreaInset from './components/Checklist/AreaInset.vue'
+import ChecklistInsights from './components/Checklist/ChecklistInsights.vue'
+import { evidence as gapEvidence, regionGaps } from './components/Checklist/insights.js'
+import { buildChecklist, filterChecklist, toCSV, toText, toRTF, download, isSpecimen, countySuffixFor, restrictToRegion, rowsInRegion, countiesIn, GAZETTEER_PLACES, asCountryRows, areaNote, areaNotes, regionsOf, insetAreas } from './components/Checklist/checklist.js'
 
 // Country checklist: all Darwin Core occurrences of the country (literature records from
 // asserted distributions + specimens), grouped by subfamily, genus and species, with the
@@ -352,6 +421,14 @@ async function load() {
       rows.value = rows.value.concat(res.data)
       if (!res.data.length || rows.value.length >= total.value) break
     }
+    // records on the country's gazetteers (custom areas, e.g. "North Italy" sensu Scaramozzino)
+    for (const g of GAZETTEER_PLACES[country.value] || []) {
+      for (let page = 1; page < 50; page++) {
+        const res = await makeAPIRequest.get('/dwc_occurrences', { params: { locality: g.locality, per: 500, page } })
+        rows.value = rows.value.concat(asCountryRows(res.data, country.value, g.region))
+        if (res.data.length < 500) break
+      }
+    }
   } catch (e) {
     error.value = 'Could not load the records. Please try again later.'
   } finally {
@@ -428,12 +505,31 @@ function segments(t) {
   return out
 }
 // with a region (state) chosen, the checklist is the checklist of that region
-const regional = computed(() => restrictToRegion(checklist.value, region.value, byCounty.value ? county.value : ''))
+// a literature area ("North Italy") stands for itself + its regions
+const regional = computed(() => restrictToRegion(checklist.value, regionsOf(country.value, region.value), byCounty.value ? county.value : ''))
 const countyOptions = computed(() => (region.value ? countiesIn(checklist.value, region.value) : []))
 const countySuffix = computed(() => countySuffixFor(country.value))
+// definitions of the literature areas: the one chosen in the filter, else all those used
+const literatureAreas = computed(() => regions.value.filter((r) => areaNote(country.value, r)))
+const plainRegions = computed(() => regions.value.filter((r) => !areaNote(country.value, r)))
+const areaSource = (r) => (GAZETTEER_PLACES[country.value] || []).find((g) => g.region === r)?.source || ''
+// data gaps per region (map "Colour by": number of works / latest record)
+const gaps = computed(() => regionGaps(gapEvidence(rows.value, country.value, citations.value), country.value))
+function gotoSubfamily(name) {
+  text.value = ''
+  nextTick(() => document.getElementById(`sf-${name}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
+function downloadInsight({ name, content }) {
+  download(`WID_${name}_${slug.value}_${today}.csv`, '\ufeff' + content, 'text/csv;charset=utf-8')
+}
+const shownAreaNotes = computed(() => (region.value ? [areaNote(country.value, region.value)].filter(Boolean) : areaNotes(checklist.value, country.value)))
 const shown = computed(() => filterChecklist(regional.value.subfamilies, { text: text.value }))
 const regions = computed(() =>
-  [...new Set(checklist.value.subfamilies.flatMap((s) => s.genera.flatMap((g) => g.taxa.flatMap((t) => t.regions.map((r) => r.region)))))]
+  [...new Set([
+    ...checklist.value.subfamilies.flatMap((s) => s.genera.flatMap((g) => g.taxa.flatMap((t) => t.regions.map((r) => r.region)))),
+    // the literature areas are always offered (they also gather their regions)
+    ...(GAZETTEER_PLACES[country.value] || []).map((g) => g.region)
+  ])]
     .sort((a, b) => (a === country.value) - (b === country.value) || a.localeCompare(b))
 )
 const statTiles = computed(() => {
@@ -455,7 +551,7 @@ const opts = computed(() => ({ country: country.value, title: `Ichneumonidae of 
 const downloads = [
   { label: 'Word (RTF)', title: 'Formatted checklist, opens in Word', run: () => download(`WID_checklist_${slug.value}_${today}.rtf`, toRTF(regional.value, opts.value), 'application/rtf') },
   { label: 'Text', title: 'Formatted checklist as plain text', run: () => download(`WID_checklist_${slug.value}_${today}.txt`, toText(regional.value, opts.value), 'text/plain;charset=utf-8') },
-  { label: 'CSV', title: 'One row per record and work cited, Darwin Core columns, with the citation and its pages', run: () => download(`WID_records_${slug.value}_${today}.csv`, '﻿' + toCSV(rowsInRegion(rows.value, region.value, country.value, byCounty.value ? county.value : ''), citations.value), 'text/csv;charset=utf-8') },
+  { label: 'CSV', title: 'One row per record and work cited, Darwin Core columns, with the citation and its pages', run: () => download(`WID_records_${slug.value}_${today}.csv`, '﻿' + toCSV(rowsInRegion(rows.value, regionsOf(country.value, region.value), country.value, byCounty.value ? county.value : ''), citations.value), 'text/csv;charset=utf-8') },
   { label: 'References', title: 'All works cited in the checklist', run: () => download(`WID_references_${slug.value}_${today}.txt`, regional.value.references.map((r) => r.full).join('\r\n'), 'text/plain;charset=utf-8') }
 ]
 </script>

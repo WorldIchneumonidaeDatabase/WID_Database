@@ -1,6 +1,6 @@
 // node pages/components/Checklist/checklist.test.mjs
 import assert from 'node:assert/strict'
-import { shortCitation, splitReferences, bareName, buildChecklist, regionText, filterChecklist, toCSV, toText, toRTF, citationRef, distributionText, restrictToRegion, rowsInRegion, countiesIn } from './checklist.js'
+import { shortCitation, splitReferences, bareName, buildChecklist, regionText, filterChecklist, toCSV, toText, toRTF, citationRef, distributionText, restrictToRegion, rowsInRegion, countiesIn, asCountryRows, GAZETTEER_PLACES, areaNote, areaNotes, regionsOf, insetAreas } from './checklist.js'
 
 assert.equal(shortCitation('Pagliano, G. &amp; Poggi, R. (2004) <i>Agriotypus</i> …'), 'Pagliano & Poggi, 2004')
 assert.equal(shortCitation('Pagliano, G. (2009) Le collezioni …'), 'Pagliano, 2009')
@@ -96,4 +96,22 @@ assert.equal(lucas.references.length, 0)
 assert.equal(restrictToRegion(byCounty, 'Ohio', 'Nowhere').subfamilies.length, 0)
 assert.deepEqual(countiesIn(byCounty, 'Ohio'), ['Lucas', 'Ottawa'])
 assert.equal(rowsInRegion(us, 'Ohio', 'United States', 'Ottawa').length, 1)
+const gz = asCountryRows([{ ...lit('Allophroides boops', '(Gravenhorst, 1829)', 'Tersilochinae', 'Allophroides', undefined, 'Scaramozzino, P.L. (1995) Checklist.'), country: undefined, locality: 'North Italy (sensu Scaramozzino 1995)' }], 'Italy', 'North Italy')
+assert.equal(regionText(buildChecklist(gz, 'Italy').subfamilies[0].genera[0].taxa[0].regions[0]), 'North Italy (Scaramozzino, 1995)')
+assert.equal(GAZETTEER_PLACES.Italy.length, 2)
+assert.ok(areaNote('Italy', 'North Italy').startsWith('North Italy (sensu Scaramozzino, 1995): Friuli-Venezia Giulia, Veneto'))
+assert.equal(areaNote('Italy', 'Veneto'), '')
+const gzCl = buildChecklist(gz, 'Italy')
+assert.equal(areaNotes(gzCl, 'Italy').length, 1)
+assert.ok(toText(gzCl, { country: 'Italy', title: 'T', date: 'd' }).includes('Areas:'))
+assert.ok(toRTF(gzCl, { country: 'Italy', title: 'T', date: 'd' }).includes('\\i North Italy (sensu'))
+// "North Italy" in the filter = the area + its regions
+assert.deepEqual(regionsOf('Italy', 'North Italy').slice(0, 3), ['North Italy', 'Friuli-Venezia Giulia', 'Veneto'])
+assert.deepEqual(regionsOf('Italy', 'Veneto'), ['Veneto'])
+const mixed = buildChecklist([...gz, lit('Ateleute linearis', 'Förster, 1871', 'Ateleutinae', 'Ateleute', 'Veneto', 'Di Giovanni, F. (2015) X.'), lit('Collyria coxator', '(Villers, 1789)', 'Collyriinae', 'Collyria', 'Lazio', 'Izquierdo Moya, M.I. (1985) Y.')], 'Italy')
+const north = restrictToRegion(mixed, regionsOf('Italy', 'North Italy'))
+assert.deepEqual(north.subfamilies.map((s) => s.name), ['Ateleutinae', 'Tersilochinae'])
+assert.equal(rowsInRegion([...gz, lit('A b', 'X', 'S', 'A', 'Lazio', 'R')], regionsOf('Italy', 'North Italy'), 'Italy').length, 1)
+assert.deepEqual(insetAreas('Italy').map((a) => a.label), ['North Italy', 'South Italy', 'Sicily', 'Sardinia'])
+assert.deepEqual(insetAreas('France'), [])
 console.log('checklist: all tests passed')

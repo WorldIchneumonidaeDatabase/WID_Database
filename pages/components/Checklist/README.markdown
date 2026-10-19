@@ -98,3 +98,60 @@ To rebuild: download `ne_10m_admin_1_states_provinces.geojson` (Natural Earth), 
 `name` + `keys`; counties from `us-atlas/counties-10m.json` with `topojson-client`.
 
 Tests: `node pages/components/Checklist/mapData.test.mjs`.
+
+## Gazetteers (custom areas, e.g. "North Italy" sensu Scaramozzino 1995)
+
+Asserted distributions on a **gazetteer** (TaxonWorks → Gazetteer task) have no country or region
+in the Darwin Core index, only the gazetteer's name as `locality` — so `/dwc_occurrences?country=Italy`
+misses them. `GAZETTEER_PLACES` in `checklist.js` lists, per country, each gazetteer's exact name
+and the label to show; the page also loads `/dwc_occurrences?locality=<name>` for each and adds those
+records to the country with that label as region:
+
+> *Allophroides boops* (Gravenhorst, 1829) — Distribution in Italy: North Italy (Scaramozzino, 1995: 36).
+
+When you create a new gazetteer, add an entry there (the name must match TaxonWorks exactly),
+with its `source` and `members` (the regions it includes). The definition is shown:
+in the Region menu ("North Italy (sensu Scaramozzino, 1995)"), in a note under the filters
+("North Italy (sensu Scaramozzino, 1995): Friuli-Venezia Giulia, Veneto, …" — only the chosen
+area, or all areas used in the checklist), on hover over the name in the list, and as "Areas:"
+at the top of the Word / Text downloads (`areaNote`, `areaNotes`).
+These areas are not drawn on the map (listed under "Not on the map").
+
+
+### Literature areas in the filter and the inset map
+
+- Choosing **North Italy** (or South Italy) in the Region menu lists every taxon recorded from
+  the area **or from any of its regions** (`regionsOf` → `restrictToRegion` / `rowsInRegion`);
+  the matching places are highlighted in each line. Downloads follow.
+- **Inset map** (`AreaInset.vue`, next to the filters, only for countries with areas): the areas
+  of `insetAreas()` — the gazetteers of `GAZETTEER_PLACES` plus `INSET_EXTRA` (Sicily, Sardinia) —
+  each in a light colour with its name. Hover an area (or choose it in the filter) to highlight it
+  and read its definition underneath; click it to filter.
+
+## Insights (`ChecklistInsights.vue`, `insights.js`)
+
+A tabbed panel under the map, computed from the same rows and citations as the list
+(and restricted to the selected region / county):
+
+- **Subfamilies** — species per subfamily; click a bar to jump to that subfamily in the list.
+- **Species × region** — one row per species, one column per region (grouped North Italy /
+  South Italy / Sicily / Sardinia for Italy). ○ literature · ● specimens · ◉ both; hatched cells
+  = recorded only for a wider literature area (e.g. "North Italy"). Downloadable as CSV.
+- **Discovery curve** — cumulative species by year of first record (publication year or
+  collecting year).
+- **Literature** — records per decade of publication, and the works contributing most records.
+- **Literature vs specimens** — per region, species known only from literature, from both,
+  or only from specimens.
+
+Colours: literature #2a78d6, both #1baf7a, specimens #eb6834.
+
+### Data gaps on the map
+
+The map's **Colour by** select (state level, not in county view) switches between number of
+taxa, number of works citing records, and year of the latest record (literature or specimen),
+so poorly studied regions stand out.
+
+### Region dropdown
+
+Gazetteer literature areas (e.g. North / South Italy, labelled "sensu source") are listed in
+their own group, "Areas of the literature", separated from the ordinary regions.

@@ -15,6 +15,64 @@ const REGION_ALIASES = {
 }
 export const regionName = (s) => REGION_ALIASES[s?.trim()] || s?.trim() || ''
 
+// Gazetteers: custom areas made in TaxonWorks (Gazetteer task), e.g. the "North Italy" of
+// Scaramozzino (1995). Records on a gazetteer carry no country or region in the Darwin Core
+// index — only its name as `locality` — so each one is listed here with the country it belongs
+// to and the label to show. Add a line when you create a new gazetteer.
+export const GAZETTEER_PLACES = {
+  Italy: [
+    {
+      locality: 'North Italy (sensu Scaramozzino 1995)',
+      region: 'North Italy',
+      source: 'Scaramozzino, 1995',
+      members: ['Friuli-Venezia Giulia', 'Veneto', 'Trentino-Alto Adige', 'Lombardia', "Valle d'Aosta", 'Piemonte', 'Liguria', 'Emilia-Romagna']
+    },
+    {
+      locality: 'South Italy (sensu Scaramozzino 1995)',
+      region: 'South Italy',
+      source: 'Scaramozzino, 1995',
+      members: ['Toscana', 'Marche', 'Umbria', 'Lazio', 'Abruzzo', 'Molise', 'Campania', 'Puglia', 'Basilicata', 'Calabria']
+    }
+  ]
+}
+
+// The places a filter value stands for: an area of the literature ("North Italy") = the area
+// itself + every region inside it; anything else = itself
+export function regionsOf(country, region) {
+  if (!region) return []
+  const g = (GAZETTEER_PLACES[country] || []).find((x) => x.region === region)
+  return g ? [g.region, ...g.members.map(regionName)] : [region]
+}
+
+// The areas drawn on the inset map of a country, in a fixed order (one light colour each)
+export function insetAreas(country) {
+  const gz = (GAZETTEER_PLACES[country] || []).map((g) => ({ label: g.region, region: g.region, members: g.members, source: g.source }))
+  const extra = INSET_EXTRA[country] || []
+  return gz.length ? [...gz, ...extra] : []
+}
+// islands / areas that are single regions (shown on the inset with the gazetteers)
+export const INSET_EXTRA = {
+  Italy: [
+    { label: 'Sicily', region: 'Sicilia', members: ['Sicilia'] },
+    { label: 'Sardinia', region: 'Sardegna', members: ['Sardegna'] }
+  ]
+}
+
+// "North Italy" → its definition, for the filter, the list and the downloads
+export function areaNote(country, region) {
+  const g = (GAZETTEER_PLACES[country] || []).find((x) => x.region === region)
+  return g ? `${g.region} (sensu ${g.source}): ${g.members.join(', ')}` : ''
+}
+// the definitions of the areas used in a checklist
+export function areaNotes(cl, country) {
+  const used = new Set(cl.subfamilies.flatMap((sf) => sf.genera.flatMap((g) => g.taxa.flatMap((t) => t.regions.map((r) => r.region)))))
+  return (GAZETTEER_PLACES[country] || []).filter((g) => used.has(g.region)).map((g) => areaNote(country, g.region))
+}
+
+// rows of a gazetteer → rows of the country, with the gazetteer label as region
+export const asCountryRows = (rows, country, region) =>
+  rows.map((r) => ({ ...r, country: r.country || country, stateProvince: r.stateProvince || region }))
+
 export const stripTags = (s) =>
   String(s || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim()
 
@@ -207,9 +265,10 @@ export function filterChecklist(list, { text = '', region = '' } = {}) {
 // region (and its counties, or only that county); the references are the works cited there.
 // Used on screen and for the downloads.
 export function restrictToRegion(cl, region, county = '') {
-  if (!region) return cl
+  const wanted = Array.isArray(region) ? region : region ? [region] : []
+  if (!wanted.length) return cl
   const keep = (r) => {
-    if (r.region !== region) return null
+    if (!wanted.includes(r.region)) return null
     if (!county) return r
     const c = (r.counties || []).filter((x) => x.name === county)
     return c.length ? { ...r, refs: [], fullRefs: [], specimens: 0, institutions: [], counties: c } : null
@@ -229,10 +288,12 @@ export function restrictToRegion(cl, region, county = '') {
   return { ...cl, subfamilies, references: [...cited.entries()].map(([full, short]) => ({ full, short })).sort((a, b) => a.full.localeCompare(b.full)) }
 }
 
-export const rowsInRegion = (rows, region, country, county = '') =>
-  region
-    ? rows.filter((r) => (regionName(r.stateProvince) || country) === region && (!county || String(r.county || '').trim() === county))
+export const rowsInRegion = (rows, region, country, county = '') => {
+  const wanted = Array.isArray(region) ? region : region ? [region] : []
+  return wanted.length
+    ? rows.filter((r) => wanted.includes(regionName(r.stateProvince) || country) && (!county || String(r.county || '').trim() === county))
     : rows
+}
 
 // counties with records in one region (for the County menu)
 export function countiesIn(cl, region) {
@@ -272,6 +333,8 @@ const heading = (cl, { country, date, byCounty }) =>
 // plain-text checklist, as it would appear in a paper
 export function toText(cl, { country, title, date, byCounty = false }) {
   const out = [title, heading(cl, { country, date, byCounty }), '']
+  const notes = areaNotes(cl, country)
+  if (notes.length) out.push('Areas:', ...notes, '')
   for (const sf of cl.subfamilies) {
     out.push(sf.name.toUpperCase(), '')
     for (const g of sf.genera) {
@@ -292,7 +355,8 @@ export function toRTF(cl, { country, title, date, byCounty = false }) {
   const p = (s) => `{\\pard\\sa120 ${s}\\par}`
   const out = ['{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Times New Roman;}}\\f0\\fs22',
     p(`\\b ${rtfEsc(title)}\\b0`),
-    p(rtfEsc(heading(cl, { country, date, byCounty })))]
+    p(rtfEsc(heading(cl, { country, date, byCounty }))),
+    ...areaNotes(cl, country).map((n) => p(`\\i ${rtfEsc(n)}\\i0`))]
   for (const sf of cl.subfamilies) {
     out.push(p(`\\b ${rtfEsc(sf.name)}\\b0`))
     for (const g of sf.genera) {

@@ -3,7 +3,7 @@
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
       <h2 class="font-semibold text-base-content">
         <template v-if="focus">Map of <i>{{ focus }}</i></template>
-        <template v-else>{{ byCounty ? 'Taxa per county' : `Taxa per ${placeWord}` }}</template>
+        <template v-else>{{ byCounty ? 'Taxa per county' : metricOn ? (colorBy === 'works' ? `Works per ${placeWord}` : `Latest record per ${placeWord}`) : `Taxa per ${placeWord}` }}</template>
         <span class="font-normal text-base-content/60"> · {{ [county ? county + (/^United States/.test(country) ? ' Co.' : '') : '', region, country].filter(Boolean).join(', ') }}</span>
       </h2>
       <button
@@ -37,7 +37,7 @@
           v-if="!focus"
           class="font-semibold mb-1"
         >
-          Taxa
+          {{ metricOn ? (colorBy === 'works' ? 'Works' : 'Latest record') : 'Taxa' }}
         </div>
         <div
           v-for="l in legend"
@@ -68,6 +68,24 @@
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-base-content/80">
+      <label
+        v-if="gaps && !byCounty && !focus"
+        class="flex items-center gap-2"
+      >
+        Colour by
+        <select
+          v-model="colorBy"
+          class="rounded-lg px-2 py-1.5 ring-1 ring-base-border bg-base-foreground text-base-content"
+        >
+          <option
+            v-for="o in COLOR_BY"
+            :key="o.id"
+            :value="o.id"
+          >
+            {{ o.label }}
+          </option>
+        </select>
+      </label>
       <label class="flex items-center gap-2">
         Colours
         <select
@@ -150,6 +168,8 @@ const props = defineProps({
   county: { type: String, default: '' },
   byCounty: { type: Boolean, default: false },
   focus: { type: String, default: '' },
+  // data gaps per region: Map(region → { works, latest }) — for "Colour by"
+  gaps: { type: Object, default: null },
   placeWord: { type: String, default: 'region' }
 })
 const emit = defineEmits(['select-region', 'select-county', 'clear-focus'])
@@ -162,7 +182,16 @@ const palette = ref(saved.palette in PALETTES || saved.palette === 'custom' ? sa
 const customColor = ref(saved.customColor || '#2b7a78')
 const pointColor = ref(saved.pointColor || '#e8590c')
 const ramp = computed(() => (palette.value === 'custom' ? rampFromColor(customColor.value) : PALETTES[palette.value].ramp))
-watch([palette, customColor, pointColor], () => {
+// what the colours show: taxa (default), or the data gaps — number of works, latest year
+const colorBy = ref('taxa')
+const COLOR_BY = [
+  { id: 'taxa', label: 'Number of taxa' },
+  { id: 'works', label: 'Number of works (references)' },
+  { id: 'latest', label: 'Year of the latest record' }
+]
+const metricOn = computed(() => colorBy.value !== 'taxa' && !props.byCounty && !props.focus && props.gaps)
+const metricOf = (name) => (props.gaps?.get(name) || {})[colorBy.value === 'works' ? 'works' : 'latest'] || 0
+watch([palette, customColor, pointColor, colorBy], () => {
   try { localStorage.setItem(COLORS_KEY, JSON.stringify({ palette: palette.value, customColor: customColor.value, pointColor: pointColor.value })) } catch (e) { /* ignore */ }
   draw()
 })
@@ -213,16 +242,38 @@ const points = computed(() =>
 const scale = computed(() => {
   const src = props.byCounty ? counts.value.counties : counts.value.regions
   if (props.focus) return { br: [1], colors: [ramp.value[3]] }
+  if (metricOn.value) {
+    const vals = [...(props.gaps?.keys() || [])].map(metricOf).filter(Boolean)
+    if (colorBy.value === 'latest' && vals.length) {
+      // years: 5 equal steps from the oldest to the newest latest-record year (recent = dark)
+      const a = Math.min(...vals)
+      const b = Math.max(...vals)
+      const st = Math.max(1, Math.ceil((b - a + 1) / 5))
+      const br = [...new Set([0, 1, 2, 3, 4].map((i) => a + i * st).filter((y) => y <= b))]
+      return { br, colors: rampFor(br.length, ramp.value), years: true, last: b }
+    }
+    const br = breaks(vals)
+    return { br, colors: rampFor(br.length, ramp.value) }
+  }
   const br = breaks([...src.values()].map((v) => v.taxa))
   return { br, colors: rampFor(br.length, ramp.value) }
 })
 const legend = computed(() => {
   const { br, colors } = scale.value
   if (props.focus) return [{ label: 'Recorded', color: colors[0] }, { label: 'No record', color: '#eef0f3' }]
+  if (scale.value.years) {
+    return br.map((b, i) => ({ label: i < br.length - 1 ? `${b}–${br[i + 1] - 1}` : `${b}–${scale.value.last}`, color: colors[i] }))
+      .concat([{ label: 'No dated record', color: '#eef0f3' }])
+  }
   return br.map((b, i) => ({ label: i < br.length - 1 && br[i + 1] - 1 > b ? `${b}–${br[i + 1] - 1}` : i < br.length - 1 ? `${b}` : `${b}+`, color: colors[i] }))
     .concat([{ label: 'No record', color: '#eef0f3' }])
 })
 const fillFor = (v) => (v ? scale.value.colors[classOf(v.taxa, scale.value.br)] : '#eef0f3')
+const fillForPlace = (name, v) => {
+  if (!metricOn.value) return fillFor(v)
+  const m = metricOf(name)
+  return m ? scale.value.colors[classOf(m, scale.value.br)] : '#eef0f3'
+}
 
 // name of the WID place drawn by feature i of the chosen level
 const nameOfFeature = computed(() => {
@@ -260,12 +311,16 @@ function draw(fit = false) {
           color: sel ? '#111' : '#7a8594', weight: sel ? 2.5 : showCounties ? 1.2 : 0.8,
           // in county view the states are outlines only and let clicks through to the counties
           fill: !showCounties,
-          fillColor: fillFor(v), fillOpacity: 1
+          fillColor: fillForPlace(name, v), fillOpacity: 1
         }
       },
       onEachFeature: (f, layer) => {
         const name = nameOfFeature.value.get(lv.features.indexOf(f))
-        if (!showCounties) layer.bindTooltip(tip(name || f.properties.name, name ? counts.value.regions.get(name) : null), { sticky: true })
+        if (!showCounties) {
+          const g = name && props.gaps?.get(name)
+          const extra = metricOn.value && g ? `<br>${g.works} work${g.works === 1 ? '' : 's'} · latest record ${g.latest || '—'}` : ''
+          layer.bindTooltip(tip(name || f.properties.name, name ? counts.value.regions.get(name) : null) + extra, { sticky: true })
+        }
         if (name && !showCounties) layer.on('click', () => emit('select-region', props.region === name ? '' : name))
       }
     })
@@ -330,7 +385,7 @@ onBeforeUnmount(() => { map?.remove(); map = null })
 watch(() => props.country, async () => { counties.value = null; await loadBoundaries(); await ensureCounties(); draw(true) })
 watch(() => props.byCounty, async () => { await ensureCounties(); draw() })
 watch(() => [props.region, props.county, props.focus], () => draw(true))
-watch(() => [props.checklist, showPoints.value], () => draw())
+watch(() => [props.checklist, showPoints.value, props.gaps], () => draw())
 
 // ---------------------------------------------------------------- downloads
 
