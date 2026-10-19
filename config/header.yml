@@ -18,6 +18,8 @@
           link: /RecentTaxa
         - label: Keys
           link: /keys
+        - label: Country checklists
+          link: /checklist
           
     - label: Bibliography
       submenu:
