@@ -3,6 +3,7 @@ import { registerOnlyClientComponents } from '@/components/clientComponents'
 import { registerGlobalComponents } from './components/globalComponents'
 import { createHead } from '@unhead/vue/client'
 import { schemaOrgPlugin } from '@/plugins/schemaOrg'
+import { initI18n } from '@/i18n'
 
 const originUrl = window.location.origin
 const storeInitialState = window.initialState
@@ -36,4 +37,5 @@ registerGlobalComponents(app)
 
 router.isReady().then(() => {
   app.mount('#app')
+  initI18n()
 })

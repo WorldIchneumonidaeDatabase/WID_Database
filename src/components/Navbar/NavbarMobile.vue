@@ -62,6 +62,13 @@
           </li>
           <li>
             <ClientOnly>
+              <SwitchLanguage
+                class="text-base-content w-full p-4 pt-3 pb-3 box-border border-b border-b-base-border"
+              />
+            </ClientOnly>
+          </li>
+          <li>
+            <ClientOnly>
               <SwitchTheme
                 class="text-base-content w-full p-4 pt-3 pb-3 block box-border border-b border-b-base-border"
               />
@@ -83,6 +90,7 @@
 <script setup>
 import { ref } from 'vue'
 import SwitchTheme from '../SwitchTheme.vue'
+import SwitchLanguage from '../SwitchLanguage.vue'
 
 const { header_links } = __APP_ENV__
 const isMenuVisible = ref(false)
