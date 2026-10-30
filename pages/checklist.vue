@@ -2,7 +2,7 @@
   <div class="bg-base-background min-h-screen">
     <PageHeader
       eyebrow="Checklists"
-      :title="`Ichneumonidae of ${country}`"
+      :title="country ? `Ichneumonidae of ${country}` : 'Country checklists'"
       subtitle="Every species recorded from a country in WID, with its distribution by region: literature records with the works that report them, and specimens. Search it here or download it."
     >
       <label class="flex flex-col gap-1 text-sm text-white/80">
@@ -13,13 +13,13 @@
           @change="go"
         >
           <option
-            v-if="!countries.some((c) => c.name === countryInput)"
+            v-if="!visibleCountries.some((c) => c.name === countryInput)"
             :value="countryInput"
           >
-            {{ countryInput }}
+            {{ countryInput || 'Choose a country…' }}
           </option>
           <option
-            v-for="c in countries"
+            v-for="c in visibleCountries"
             :key="c.name"
             :value="c.name"
           >
@@ -31,25 +31,54 @@
           class="text-xs text-white/60"
         >Loading the list of countries…</span>
         <span
-          v-else-if="countries.length"
+          v-else-if="visibleCountries.length"
           class="text-xs text-white/60"
-        >{{ countries.length }} countries with records in WID</span>
+        >{{ visibleCountries.length }} countries with records in WID</span>
       </label>
     </PageHeader>
 
     <section class="container mx-auto px-4 py-8 box-border">
+      <!-- embargoed until publication (config/checklist.yml) -->
+      <div
+        v-if="blocked"
+        class="max-w-2xl rounded-2xl bg-base-foreground p-6 ring-1 ring-base-border/40"
+      >
+        <h2 class="text-lg font-semibold text-base-content">Checklist in preparation</h2>
+        <p class="mt-2 text-base-content/70">
+          {{ embargo.note || `The checklist of the Ichneumonidae of ${country} is being prepared for publication and will appear here once it is published.` }}
+          <template v-if="embargoUntil"> Expected from {{ embargoUntil }}.</template>
+        </p>
+        <p class="mt-2 text-base-content/70">Choose another country from the list above.</p>
+      </div>
+      <p
+        v-else-if="embargo"
+        class="mb-6 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-100 dark:ring-amber-400/20"
+      >
+        Embargoed: this checklist is hidden on the public site<template v-if="embargoUntil"> until {{ embargoUntil }}</template>. You see it because the site runs on your computer.
+      </p>
+
       <!-- loading / errors -->
       <p
-        v-if="loading"
+        v-if="!blocked && loading"
         class="text-base-content/70"
       >
         Loading records for {{ country }}… {{ rows.length }}<template v-if="total"> of {{ total }}</template>
       </p>
       <p
-        v-else-if="error"
+        v-else-if="!blocked && error"
         class="text-red-600"
       >
         {{ error }}
+      </p>
+      <p
+        v-else-if="blocked"
+        class="hidden"
+      />
+      <p
+        v-else-if="!country"
+        class="text-base-content/70"
+      >
+        Choose a country from the list above to see its checklist.
       </p>
       <p
         v-else-if="!rows.length"
@@ -373,9 +402,20 @@ async function loadCountries() {
   }
 }
 
+// Italy opens by default, unless its checklist is under embargo (then the page asks for a country)
+function defaultCountry() {
+  const day = new Date().toISOString().slice(0, 10)
+  const italyHidden =
+    !import.meta.env.DEV &&
+    (__APP_ENV__.checklist?.embargo || []).some(
+      (e) => String(e?.country || '').trim().toLowerCase() === 'italy' && (!e.until || day < String(e.until).slice(0, 10))
+    )
+  return italyHidden ? '' : 'Italy'
+}
+
 const route = useRoute()
 const router = useRouter()
-const country = ref(route.query.country || 'Italy')
+const country = ref(route.query.country || defaultCountry())
 const countryInput = ref(country.value)
 const rows = ref([])
 const total = ref(0)
@@ -405,7 +445,29 @@ const citationsLoading = ref(false)
 const today = new Date().toISOString().slice(0, 10)
 onMounted(loadCountries)
 
+// Embargo (config/checklist.yml): countries kept off the public checklist until
+// their checklist is published. On a development server they still show.
+const EMBARGO = (__APP_ENV__.checklist?.embargo || []).filter((e) => e && e.country)
+const untilOf = (e) => (e.until ? String(e.until).slice(0, 10) : '')
+const embargoOf = (name) =>
+  EMBARGO.find((e) => e.country.trim().toLowerCase() === String(name).trim().toLowerCase() && (!untilOf(e) || today < untilOf(e)))
+const preview = import.meta.env.DEV
+const embargo = computed(() => embargoOf(country.value) || null)
+const blocked = computed(() => !!embargo.value && !preview)
+const embargoUntil = computed(() =>
+  embargo.value && untilOf(embargo.value)
+    ? new Date(untilOf(embargo.value) + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+    : ''
+)
+const visibleCountries = computed(() => countries.value.filter((c) => preview || !embargoOf(c.name)))
+
 async function load() {
+  if (blocked.value || !country.value) {
+    rows.value = []
+    total.value = 0
+    loading.value = false
+    return
+  }
   loading.value = true
   error.value = ''
   rows.value = []
@@ -469,7 +531,7 @@ function go() {
 }
 
 watch(() => route.query.country, (c) => {
-  country.value = c || 'Italy'
+  country.value = c || defaultCountry()
   countryInput.value = country.value
   load()
 }, { immediate: true })

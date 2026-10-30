@@ -1,0 +1,19 @@
+# Country checklists (/#/checklist)
+checklist:
+  # Embargo: countries kept off the public checklist page until their checklist
+  # is published. They disappear from the country list, and their checklist
+  # (map, statistics, downloads) is not shown. On your own computer (npm run dev)
+  # they still show, with a yellow note, so you can keep working on them.
+  # This hides the checklist page only: the records stay on the taxon pages and
+  # in TaxonWorks.
+  #
+  #   - country: United States     # exactly as in the country list
+  #     until: '2027-06-01'        # optional: shows by itself from this date
+  #     note: 'The checklist of the Ichneumonidae of the United States is in preparation.'
+  embargo:
+    - country: United States
+      note: 'The checklist of the Ichneumonidae of the United States is in preparation.'
+    - country: Italy
+      note: 'The checklist of the Ichneumonidae of Italy is in preparation.'
+    - country: Hong Kong
+      note: 'The checklist of the Ichneumonidae of Hong Kong is in preparation.'
