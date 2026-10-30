@@ -67,7 +67,10 @@
 
 /* ------------------------ Header ------------------------ */
 /* Deep navy header that blends into the home-page hero */
+/* Above the taxon-page header (z-index 1200, kept above the map) so the menus open on top */
 .tp-header {
+  position: relative;
+  z-index: 1300;
   background-color: #0f1b33 !important;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
 }
