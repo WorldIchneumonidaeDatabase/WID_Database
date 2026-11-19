@@ -10,6 +10,7 @@ import {
 } from '../utils'
 import { ASSERTED_ABSENT } from '@/constants/objectTypes'
 import { LEGEND } from '../constants'
+import { readMap, saveMap, thinFeatures } from '../utils/mapCache'
 
 function normalizeAbsentFeatures(arr) {
   arr.forEach((feature) => {
@@ -44,7 +45,14 @@ export const useDistributionStore = defineStore('distributionStoreMapV2', {
         geojson: null,
         errorMessage: null,
         currentShapeTypes: [],
-        cachedMap: null
+        cachedMap: null,
+        // every record, before merging shared shapes (for the name filter)
+        rawFeatures: [],
+        // OTU ids the records are filed under (valid name + synonyms)
+        otuIds: [],
+        filterOtuId: null,
+        // the quick summary map is showing while the detailed one loads
+        loadingDetail: false
       },
       controller: null
     }
@@ -87,6 +95,45 @@ export const useDistributionStore = defineStore('distributionStoreMapV2', {
         })
     },
 
+    // Show the records (all, or only those filed under one name)
+    applyFeatures() {
+      const d = this.distribution
+      const list = d.filterOtuId
+        ? d.rawFeatures.filter((f) => Number(f.properties.target?.id) === Number(d.filterOtuId))
+        : d.rawFeatures
+      const { features, shapeTypes } = removeDuplicateShapes(
+        sortFeaturesByType(list, Object.keys(LEGEND))
+      )
+      d.currentShapeTypes = shapeTypes
+      d.geojson = { features }
+    },
+
+    setFilterOtu(otuId) {
+      this.distribution.filterOtuId = otuId || null
+      this.applyFeatures()
+    },
+
+    useDetailed(features) {
+      normalizeAbsentFeatures(features)
+      const d = this.distribution
+      d.rawFeatures = features
+      d.otuIds = [...new Set(features.map((f) => Number(f.properties.target?.id)).filter(Boolean))]
+      d.loadingDetail = false
+      this.applyFeatures()
+    },
+
+    // The 1-second summary shape, shown while the detailed map is being built
+    loadPreview(otuId) {
+      TaxonWorks.getOtuDistribution(otuId, { signal: this.controller.signal })
+        .then(({ data }) => {
+          if (!this.distribution.loadingDetail) return // detail already here
+          const geojson = JSON.parse(data.cached_map.geo_json)
+          this.distribution.currentShapeTypes = ['Aggregate']
+          this.distribution.geojson = { features: [makeGeoJSONFeature(geojson, 'Aggregate')] }
+        })
+        .catch(() => {})
+    },
+
     async loadDistribution({ otuId, rankString }) {
       const isSpeciesGroup =
         rankString &&
@@ -96,6 +143,16 @@ export const useDistributionStore = defineStore('distributionStoreMapV2', {
       this.controller = new AbortController()
 
       if (isSpeciesGroup) {
+        const key = `otu:${otuId}`
+        const saved = await readMap(key)
+        if (saved) {
+          this.useDetailed(saved)
+          return
+        }
+
+        this.distribution.loadingDetail = true
+        this.loadPreview(otuId)
+
         useOtuPageRequest('panel:map-v2', () =>
           makeAPIRequest.get(`/otus/${otuId}/inventory/distribution.geojson`, {
             signal: this.controller.signal
@@ -103,23 +160,18 @@ export const useDistributionStore = defineStore('distributionStoreMapV2', {
         )
           .then(({ data }) => {
             if (data.request_too_large) {
+              this.distribution.loadingDetail = false
               this.distribution.geojson = null
               this.distribution.errorMessage = data.message
             } else {
-              normalizeAbsentFeatures(data.features)
-
-              const { features, shapeTypes } = removeDuplicateShapes(
-                sortFeaturesByType(data.features, Object.keys(LEGEND))
-              )
-
-              this.distribution.currentShapeTypes = shapeTypes
-              this.distribution.geojson = {
-                features
-              }
+              const features = thinFeatures(data.features)
+              saveMap(key, JSON.parse(JSON.stringify(features)))
+              this.useDetailed(features)
             }
           })
           .catch((e) => {
             if (e.name !== RESPONSE_ERROR.CanceledError) {
+              this.distribution.loadingDetail = false
               this.getAggregateShape(otuId)
             }
           })

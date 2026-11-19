@@ -20,7 +20,7 @@
         :title="store.taxon.short_status"
       >
         <span class="h-1.5 w-1.5 rounded-full bg-current" />
-        {{ store.taxon.short_status || 'Not valid' }}
+        {{ store.taxon.cached_is_available === false ? 'Unavailable' : 'Invalid' }}
       </span>
       <span
         v-for="status in store.taxon.descorator_status"
@@ -36,6 +36,36 @@
       :title="store.taxon.short_status"
       v-html="store.taxon.full_name_tag"
     />
+
+    <!-- A not-valid name: say so plainly and link to the valid one -->
+    <p
+      v-if="validName"
+      class="mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-red-400/10 ring-1 ring-red-300/30 px-3 py-1.5 text-sm text-white/85"
+    >
+      <span>{{ store.taxon.cached_is_available === false ? 'Unavailable name.' : 'Invalid name.' }}</span>
+      <span>Valid name:</span>
+      <RouterLink
+        v-if="validName.otuId"
+        :to="{ name: 'otus-id-overview', params: { id: validName.otuId } }"
+        class="font-semibold text-white underline underline-offset-2 [&_i]:italic"
+        ><span v-html="validName.html"
+      /></RouterLink>
+      <span
+        v-else
+        class="font-semibold text-white [&_i]:italic"
+        v-html="validName.html"
+      />
+    </p>
+
+    <!-- Came from the search with an earlier combination of this species -->
+    <p
+      v-if="cameFrom"
+      class="mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-white/10 ring-1 ring-white/15 px-3 py-1.5 text-sm text-white/85"
+    >
+      <span>You searched for</span>
+      <em class="font-semibold text-white">{{ cameFrom }}</em>
+      <span>— an earlier combination of this species.</span>
+    </p>
 
     <p
       v-if="commonNames"
@@ -66,11 +96,41 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { makeAPIRequest } from '@/utils/request'
+import { useRoute } from 'vue-router'
 import { useOtuStore } from '../store/store'
 import CommonNames from './CommonNames.vue'
 
 const store = useOtuStore()
+const route = useRoute()
+
+// Set by the global search: ?from=<name>&fromId=<its OTU>&fromStatus=invalid|combination
+const cameFrom = computed(() => (route.query?.from ? String(route.query.from) : ''))
+
+// For a not-valid name: the valid name and its page
+const validName = ref(null)
+watch(
+  () => [store.taxon?.id, store.taxon?.cached_valid_taxon_name_id, store.taxon?.is_valid],
+  async ([id, validId, isValid]) => {
+    validName.value = null
+    if (!id || !validId || isValid || validId === id) return
+    try {
+      const [{ data: t }, { data: otus }] = await Promise.all([
+        makeAPIRequest.get(`/taxon_names/${validId}`),
+        makeAPIRequest.get('/otus', { params: { 'taxon_name_id[]': validId } })
+      ])
+      if (store.taxon?.id !== id) return
+      validName.value = {
+        html: `${t.cached_html || t.cached}${t.cached_author_year ? ' ' + t.cached_author_year : ''}`,
+        otuId: otus?.[0]?.id || null
+      }
+    } catch {
+      validName.value = null
+    }
+  },
+  { immediate: true }
+)
 const commonNames = computed(() => store.taxonomy.commonNames?.length)
 
 const plain = (s) => String(s || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()

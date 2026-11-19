@@ -85,10 +85,17 @@
               >{{ section.badge }}</span
             >
             <span class="min-w-0 flex-1">
-              <span
-                class="block truncate [&_i]:italic"
-                v-html="item.html"
-              />
+              <span class="flex items-center gap-2 min-w-0">
+                <span
+                  class="truncate [&_i]:italic"
+                  v-html="item.html"
+                />
+                <span
+                  v-if="item.status && item.status !== 'valid'"
+                  :class="['flex-shrink-0 rounded-full px-1.5 text-[10px] font-semibold leading-4', STATUS_CLASS[item.status]]"
+                  >{{ STATUS_TEXT[item.status] }}</span
+                >
+              </span>
               <span
                 v-if="item.sub"
                 class="block truncate text-xs text-base-content/55"
@@ -173,12 +180,25 @@ async function search(q, id) {
         .get('/otus/autocomplete', { params: { term: q, having_taxon_name_only: true } })
         .then(({ data }) => {
           if (id !== requestId) return
-          taxa.value = (data || []).slice(0, 6).map((o) => ({
-            key: `t${o.id}`,
-            type: 'taxa',
-            html: String(o.label_html || o.label).replace(/\s*&#10003;\s*/, ''),
-            otuId: o.otu_valid_id || o.id
-          }))
+          taxa.value = (data || []).slice(0, 6).map((o) => {
+            // TaxonWorks marks names: ✓ valid, ❌ not valid, [c] a combination
+            const raw = String(o.label_html || o.label)
+            const status = /&#10060;|❌/.test(raw) ? 'invalid' : /\[c\]/.test(raw) ? 'combination' : 'valid'
+            const html = raw.replace(/\s*(&#10003;|&#10060;|✓|❌|\[c\])\s*/g, ' ').trim()
+            const name = stripTags(html)
+            // "Caenojoppa Cameron, 1905 now Imeria Cameron, 1903" → "Imeria Cameron, 1903"
+            const now = String(o.label || '').split(/\s+now\s+/)[1] || (status === 'combination' ? o.label : '')
+            return {
+              key: `t${o.id}-${name}`,
+              type: 'taxa',
+              html,
+              status,
+              sub: status !== 'valid' && now && now !== name ? `→ ${escapeHtml(now)}` : '',
+              otuId: o.otu_valid_id || o.id,
+              ownOtuId: o.id,
+              name
+            }
+          })
         })
         .catch(() => {})
         .finally(() => id === requestId && (loading.value.taxa = false))
@@ -280,9 +300,22 @@ function close() {
   activeIndex.value = -1
 }
 
+// Not-valid names open their own page (which links to the valid name);
+// old combinations open the species page, which says what was searched for
+const STATUS_TEXT = { invalid: 'Invalid', combination: 'Combination' }
+const STATUS_CLASS = {
+  invalid: 'bg-red-500/10 text-red-700 dark:text-red-300',
+  combination: 'bg-base-muted text-base-content/70'
+}
+
 function choose(item) {
   if (item.type === 'taxa') {
-    router.push({ name: 'otus-id-overview', params: { id: item.otuId } })
+    if (item.status === 'invalid') {
+      router.push({ name: 'otus-id-overview', params: { id: item.ownOtuId } })
+    } else {
+      const query = item.status === 'combination' ? { from: item.name } : {}
+      router.push({ name: 'otus-id-overview', params: { id: item.otuId }, query })
+    }
   } else if (item.type === 'refs') {
     router.push({ path: '/resources/tw/filter/bibliography', query: { query_term: item.title } })
   } else if (item.type === 'people') {

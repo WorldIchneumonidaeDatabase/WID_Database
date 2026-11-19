@@ -1,5 +1,42 @@
 <template>
   <div class="flex flex-col gap-3">
+    <!-- Records filed under the valid name or one of its synonyms -->
+    <div
+      v-if="nameOptions.length > 1"
+      class="occ-names flex flex-wrap items-center gap-1.5"
+      role="group"
+      aria-label="Filter by name"
+    >
+      <span class="occ-names-label">Filed under</span>
+      <button
+        type="button"
+        :class="['occ-chip', { on: !filterOtuId }]"
+        :aria-pressed="!filterOtuId"
+        @click="filterOtuId = null"
+      >
+        All <span class="occ-chip-n">{{ dwcRecords.length }}</span>
+      </button>
+      <button
+        v-for="n in nameOptions"
+        :key="n.id"
+        type="button"
+        :class="['occ-chip', { on: filterOtuId === n.id }]"
+        :aria-pressed="filterOtuId === n.id"
+        @click="filterOtuId = filterOtuId === n.id ? null : n.id"
+      >
+        <span
+          class="[&_i]:italic"
+          v-html="n.html"
+        />
+        <span
+          v-if="!n.valid"
+          class="occ-chip-inv"
+          >Invalid</span
+        >
+        <span class="occ-chip-n">{{ dwcRecords.filter((r) => Number(r.otu_id) === n.id).length }}</span>
+      </button>
+    </div>
+
     <ListRecords
       :list="listItems"
       :is-loading="isLoading"
@@ -55,6 +92,7 @@ import DwcTable from '../../_shared/DwcTable.vue'
 import ImageLightbox from '../../_shared/ImageLightbox.vue'
 import { isSpecimenType, resolveSpecimenRef } from '../../_shared/specimenRef.js'
 import { groupRecords, groupCountLabel } from '../lib/groupRecords'
+import { otuNames } from '../../_shared/otuNames'
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 
@@ -180,6 +218,17 @@ const bioAssociationsIndex = ref(new Map())
 // Basic client-side filters — all data for this OTU is already fetched, so
 // filtering/re-grouping is instant with no extra API calls.
 const filterCountries = ref([])
+// Records filed under one name only (the valid one or a synonym); null = all
+const filterOtuId = ref(null)
+const nameOptions = ref([])
+watch(
+  () => [...new Set(dwcRecords.value.map((r) => Number(r.otu_id)).filter(Boolean))].join(','),
+  async (ids) => {
+    const list = ids ? ids.split(',').map(Number) : []
+    nameOptions.value = list.length > 1 ? await otuNames(list) : []
+    if (!list.includes(filterOtuId.value)) filterOtuId.value = null
+  }
+)
 const filterCollectors = ref([])
 const filterTypeOnly = ref(false)
 const filterMediaOnly = ref(false)
@@ -205,6 +254,7 @@ const availableCollectors = computed(() =>
 )
 
 function matchesBaseFilters(r) {
+  if (filterOtuId.value && Number(r.otu_id) !== filterOtuId.value) return false
   if (filterCountries.value.length && !filterCountries.value.includes(r.country)) return false
   if (filterCollectors.value.length && !filterCollectors.value.includes(r.recordedBy)) return false
   if (filterTypeOnly.value && !r.typeStatus) return false
@@ -805,3 +855,40 @@ function showDetail(detail) {
   }
 }
 </script>
+
+<style scoped>
+
+.occ-names-label {
+  font-size: 0.72rem;
+  color: rgba(var(--color-base-content), 0.6);
+  margin-right: 0.15rem;
+}
+.occ-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid rgba(var(--color-base-muted), 1);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.occ-chip:hover { border-color: rgba(var(--color-primary), 0.5); }
+.occ-chip.on {
+  background: rgba(var(--color-primary), 0.12);
+  border-color: rgba(var(--color-primary), 0.6);
+  color: rgb(var(--color-primary));
+  font-weight: 600;
+}
+.occ-chip-n { font-size: 0.68rem; opacity: 0.6; }
+.occ-chip-inv {
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: #fbe4e1;
+  color: #8f2418;
+}
+</style>

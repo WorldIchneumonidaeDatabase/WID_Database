@@ -58,6 +58,54 @@
         />
       </ClientOnly>
     </div>
+    <!-- Detailed records still on their way: the summary map is showing -->
+    <div
+      v-if="store.distribution.loadingDetail"
+      class="map-note flex items-center gap-2 px-3 py-1.5 text-xs"
+    >
+      <span
+        class="map-dot"
+        aria-hidden="true"
+      />
+      <span>Showing the summary map; loading the detailed records…</span>
+    </div>
+
+    <!-- Records filed under the valid name or one of its synonyms -->
+    <div
+      v-if="nameOptions.length > 1"
+      class="map-names flex flex-wrap gap-1.5 px-3 py-2"
+      role="group"
+      aria-label="Filter by name"
+    >
+      <button
+        type="button"
+        :class="['map-chip', { on: !store.distribution.filterOtuId }]"
+        :aria-pressed="!store.distribution.filterOtuId"
+        @click="store.setFilterOtu(null)"
+      >
+        All <span class="map-chip-n">{{ countFor(null) }}</span>
+      </button>
+      <button
+        v-for="n in nameOptions"
+        :key="n.id"
+        type="button"
+        :class="['map-chip', { on: store.distribution.filterOtuId === n.id }]"
+        :aria-pressed="store.distribution.filterOtuId === n.id"
+        @click="store.setFilterOtu(store.distribution.filterOtuId === n.id ? null : n.id)"
+      >
+        <span
+          class="[&_i]:italic"
+          v-html="n.html"
+        />
+        <span
+          v-if="!n.valid"
+          class="map-chip-inv"
+          >Invalid</span
+        >
+        <span class="map-chip-n">{{ countFor(n.id) }}</span>
+      </button>
+    </div>
+
     <div
       v-if="store.distribution.errorMessage"
       class="flex flex-row p-2 text-xs italic"
@@ -84,7 +132,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { otuNames } from '../_shared/otuNames'
 
 function linkify(html) {
   if (!html) return ''
@@ -133,6 +182,19 @@ const store = useDistributionStore()
 const popupElement = ref(null)
 const { popupItem, geojsonOptions } = useGeojsonOptions({ popupElement })
 
+// Names behind the records, for the filter chips (only when there is more than one)
+const nameOptions = ref([])
+watch(
+  () => store.distribution.otuIds,
+  async (ids) => {
+    nameOptions.value = ids?.length > 1 ? await otuNames(ids) : []
+  }
+)
+const countFor = (otuId) =>
+  store.distribution.rawFeatures.filter(
+    (f) => otuId == null || Number(f.properties.target?.id) === Number(otuId)
+  ).length
+
 onMounted(() => {
   isLoading.value = true
 
@@ -147,3 +209,54 @@ onBeforeUnmount(() => {
   store.$reset()
 })
 </script>
+
+<style scoped>
+.map-note {
+  color: rgba(var(--color-base-content), 0.7);
+  border-top: 1px solid rgba(var(--color-base-muted), 1);
+}
+.map-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgb(var(--color-primary));
+  animation: map-pulse 1.2s ease-in-out infinite;
+}
+@keyframes map-pulse {
+  50% { opacity: 0.25; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-dot { animation: none; }
+}
+.map-names {
+  border-top: 1px solid rgba(var(--color-base-muted), 1);
+}
+.map-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid rgba(var(--color-base-muted), 1);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.map-chip:hover { border-color: rgba(var(--color-primary), 0.5); }
+.map-chip.on {
+  background: rgba(var(--color-primary), 0.12);
+  border-color: rgba(var(--color-primary), 0.6);
+  color: rgb(var(--color-primary));
+  font-weight: 600;
+}
+.map-chip-n { font-size: 0.68rem; opacity: 0.6; }
+.map-chip-inv {
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  background: #fbe4e1;
+  color: #8f2418;
+}
+</style>
