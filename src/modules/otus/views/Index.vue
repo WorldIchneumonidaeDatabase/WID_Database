@@ -35,6 +35,11 @@
                 <DataMap />
               </ClientOnly>
               <CiteButton v-if="isReady" />
+              <ShareButton
+                v-if="isReady"
+                :otu-id="otu.id"
+                :title="taxon.full_name"
+              />
               <ReportErrorButton
                 v-if="isReady"
                 :subject="taxon.full_name"
@@ -63,6 +68,25 @@
     </div>
     <div class="pt-6 pb-10">
       <div class="container mx-auto box-border px-4">
+        <!-- TaxonWorks did not answer: say so, and offer to try again -->
+        <div
+          v-if="loadError"
+          class="wid-load-error"
+          role="alert"
+        >
+          <p class="font-semibold">TaxonWorks is not responding right now.</p>
+          <p class="text-sm opacity-80">
+            The data behind this page comes from TaxonWorks, which is slow or unavailable at the moment. Please try again in a minute.
+          </p>
+          <button
+            type="button"
+            class="wid-load-retry"
+            :disabled="retrying"
+            @click="retry"
+          >
+            {{ retrying ? 'Trying…' : 'Try again' }}
+          </button>
+        </div>
         <RouterView
           v-if="isReady"
           :key="route.fullPath"
@@ -99,6 +123,7 @@ import Breadcrumb from '../components/Breadcrumb/Breadcrumb.vue'
 import TaxaInfo from '../components/TaxaInfo.vue'
 import DWCDownload from '../components/DWCDownload.vue'
 import CiteButton from '../components/CiteButton.vue'
+import ShareButton from '../components/ShareButton.vue'
 import GlobalSearch from '~/pages/components/Search/GlobalSearch.vue'
 
 const head = injectHead()
@@ -109,6 +134,16 @@ const childrenRoutes = useChildrenRoutes()
 const store = useOtuStore()
 const footerStore = useFooterStore()
 let controller = new AbortController()
+const loadError = ref(false)
+const retrying = ref(false)
+
+async function retry() {
+  retrying.value = true
+  controller.abort()
+  controller = new AbortController()
+  await loadInitialData()
+  retrying.value = false
+}
 
 router.afterEach((route) => {
   routeParams.value = route.params
@@ -157,6 +192,7 @@ onBeforeUnmount(() => {
 async function loadInitialData() {
   store.$reset()
   footerStore.$reset()
+  loadError.value = false
 
   try {
     await store.loadInit({
@@ -166,7 +202,9 @@ async function loadInitialData() {
     updateMetadata()
   } catch (e) {
     if (e.name !== RESPONSE_ERROR.CanceledError) {
-      redirectOnError(e)
+      const status = e?.response?.status
+      if (status === 404 || status === 500) redirectOnError(e)
+      else loadError.value = true // no answer, a time-out or another server error
     }
   }
 }
@@ -238,6 +276,32 @@ function loadOtu({ id, otu_valid_id }) {
 </script>
 
 <style scoped>
+.wid-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  background: #fdf0e1;
+  color: #5c3208;
+  border: 1px solid #f0d2ad;
+}
+.wid-load-retry {
+  margin-top: 0.3rem;
+  padding: 0.35rem 0.9rem;
+  border-radius: 8px;
+  background: #8a4b0f;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wid-load-retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 .wid-otu-header {
   background:
     radial-gradient(50rem 20rem at 90% 0%, rgba(42, 98, 183, 0.45), transparent 60%),

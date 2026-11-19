@@ -170,6 +170,17 @@ const facts = computed(() => {
     })
   }
 
+  // When this name was last changed in WID (the name or its OTU, whichever is newer)
+  const stamps = [t.updated_at, store.otu?.updated_at].filter(Boolean).map((d) => Date.parse(d)).filter(Number.isFinite)
+  if (stamps.length) {
+    const last = new Date(Math.max(...stamps))
+    out.push({
+      label: 'Updated',
+      value: last.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+      title: 'Last change to this name in WID (TaxonWorks)'
+    })
+  }
+
   return out
 })
 </script>

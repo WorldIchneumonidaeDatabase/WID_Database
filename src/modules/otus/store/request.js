@@ -22,8 +22,12 @@ export const useOtuPageRequestStore = defineStore('otuPageRequest', {
   },
 
   actions: {
-    setRequest(key, { data, request }) {
-      const url = request.res?.responseUrl || request.responseURL
+    // Tolerates failed requests (no response) and responses that did not come
+    // through axios (e.g. the maps Worker), instead of breaking the page
+    setRequest(key, response) {
+      if (!response) return
+      const { data, request } = response
+      const url = request?.res?.responseUrl || request?.responseURL || response.url || ''
 
       this.requests[key] = {
         url,

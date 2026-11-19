@@ -64,8 +64,14 @@ export const useOtuStore = defineStore('otuStore', {
         TaxonWorks.getTaxonNameCitations(taxonId, { signal })
       )
 
-      const linked = ({ cached, url }) =>
-        url ? cached.replace(url, `<a href="${url}">${url}</a>`) : cached
+      // Every web address in a reference becomes a link (DOI, BHL, JSTOR…),
+      // not only the one TaxonWorks stores as the source's url
+      const linked = ({ cached }) =>
+        String(cached || '').replace(
+          /(^|[\s(>])(https?:\/\/[^\s<>"]+?)([.,;)]?)(?=\s|$|<)/g,
+          (m, before, href, after) =>
+            `${before}<a href="${href}" target="_blank" rel="noopener">${href}</a>${after}`
+        )
 
       const all = response.data.timeline || []
       const allSources = response.data.sources || []
@@ -115,8 +121,11 @@ export const useOtuStore = defineStore('otuStore', {
       try {
         await this.loadOtu(otuId, controller)
         await this.loadTaxon(this.otu.taxon_name_id, controller)
-        await this.loadCatalog(this.otu.taxon_name_id, controller)
-        await this.loadTaxonomy(otuId, controller)
+        // these two don't depend on each other: ask TaxonWorks for both at once
+        await Promise.all([
+          this.loadCatalog(this.otu.taxon_name_id, controller),
+          this.loadTaxonomy(otuId, controller)
+        ])
       } catch (error) {
         return Promise.reject(error)
       }

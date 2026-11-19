@@ -78,11 +78,38 @@
       </button>
     </div>
 
+    <!-- The history of the name at a glance; click a dot to jump to its line -->
+    <NomenTimeline
+      :entries="groupTimeline"
+      :timeline="store.catalog.timeline || []"
+      :selected-year="yearFilter"
+      @select="pickYear"
+    />
+
+    <!-- a year picked on the timeline: only its entries below -->
+    <div
+      v-if="yearFilter"
+      class="nomen-yearbar px-5 py-2 text-sm"
+    >
+      <span>
+        <strong>{{ yearFilter }}</strong> ·
+        <span>{{ filteredTimeline.length }} {{ filteredTimeline.length === 1 ? 'entry' : 'entries' }}</span>
+      </span>
+      <button
+        type="button"
+        class="nomen-link"
+        @click="yearFilter = null"
+      >
+        Show all years
+      </button>
+    </div>
+
     <ul class="text-sm">
       <CitationRow
         v-for="citation in citationList.first"
         :key="citation.label"
         :citation="citation"
+        :data-entry="entryIndex(citation)"
       />
 
       <PanelNomenclatureShowMore
@@ -100,6 +127,7 @@
           v-for="citation in citationList.middle"
           :key="citation.label"
           :citation="citation"
+          :data-entry="entryIndex(citation)"
         />
       </ul>
     </AnimationOpacity>
@@ -108,6 +136,7 @@
         v-for="citation in citationList.last"
         :key="citation.label"
         :citation="citation"
+        :data-entry="entryIndex(citation)"
       />
     </ul>
   </VCard>
@@ -120,6 +149,7 @@ import { useOtuStore } from '@/modules/otus/store/store'
 import CitationRow from './PanelCitationRow.vue'
 import PanelNomenclatureShowMore from './PanelNomenclatureShowMore.vue'
 import PanelDropdown from '../PanelDropdown.vue'
+import NomenTimeline from './NomenTimeline.vue'
 
 const MAX_CITATIONS = 2
 
@@ -180,7 +210,8 @@ const nameGroups = computed(() => {
   return [...groups.values()].sort((a, b) => Number(b.valid) - Number(a.valid))
 })
 
-const filteredTimeline = computed(() => {
+// The entries for the chosen name (all names when none is chosen)
+const groupTimeline = computed(() => {
   const tl = store.catalog.timeline || []
   if (!group.value) return tl
   // map protonym ids to their group again (cheap; lists are short)
@@ -193,8 +224,24 @@ const filteredTimeline = computed(() => {
   return tl.filter((c) => ids.has((c.protonym_ids || []).find((p) => allProto.has(p))))
 })
 
+// Click a dot on the timeline: show only that year's entries (click it again to show all)
+const yearFilter = ref(null)
+function pickYear(entry) {
+  const y = Number(entry.year)
+  yearFilter.value = yearFilter.value === y ? null : y
+}
+const filteredTimeline = computed(() =>
+  yearFilter.value
+    ? groupTimeline.value.filter((c) => Number(c.year) === yearFilter.value)
+    : groupTimeline.value
+)
+watch(group, () => (yearFilter.value = null))
+
+const entryIndex = (c) => (store.catalog.timeline || []).indexOf(c)
+
 // Filtering shows every match, without the "Show all" fold
 watch(group, (g) => { if (g) showAll.value = true })
+watch(yearFilter, (y) => { if (y) showAll.value = true })
 
 const citationList = computed(() =>
   splitList(filteredTimeline.value, MAX_CITATIONS)
@@ -246,6 +293,16 @@ const menuOptions = computed(() => [
   font-weight: 700;
   background: #fbe4e1;
   color: #8f2418;
+}
+.nomen-yearbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.3rem 0.8rem;
+  background: rgba(var(--color-primary), 0.08);
+  border-top: 1px solid rgba(var(--color-primary), 0.2);
+  border-bottom: 1px solid rgba(var(--color-primary), 0.2);
 }
 .nomen-scope {
   display: flex;
