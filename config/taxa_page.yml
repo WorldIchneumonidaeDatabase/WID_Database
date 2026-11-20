@@ -16,6 +16,7 @@ taxa_page:
           - panel:keys
           - panel:etymology
           - panel:gbif
+          - panel:catalogue-of-life
           - panel:statistics
 
   specimen_records:
