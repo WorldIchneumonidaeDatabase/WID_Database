@@ -185,7 +185,12 @@ onMounted(() => {
     className: 'map-tiles'
   })
 
-  const [currentTile] = Object.values(tiles)
+  // The visitor's last chosen base layer, if any (per browser)
+  let savedTile = null
+  try {
+    savedTile = localStorage.getItem('wid-map-tile')
+  } catch {}
+  const currentTile = tiles[savedTile] || Object.values(tiles)[0]
 
   const options = {
     center: props.center,
@@ -262,8 +267,13 @@ onMounted(() => {
 
   if (Object.keys(tiles).length > 1) {
     L.control
-      .layers(tiles, {}, { position: 'topleft', collapsed: false })
+      .layers(tiles, {}, { position: 'bottomleft', collapsed: true })
       .addTo(mapObject)
+    mapObject.on('baselayerchange', (e) => {
+      try {
+        localStorage.setItem('wid-map-tile', e.name)
+      } catch {}
+    })
   }
 
   initEvents()

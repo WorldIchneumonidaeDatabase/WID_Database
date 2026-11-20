@@ -1,13 +1,23 @@
+# Distribution maps: a Cloudflare Worker keeps a light, ready-made copy of each
+# species' map (see the WID_Maps repository). Leave endpoint empty to ask
+# TaxonWorks directly (slower: ~10 s for a species with many records).
+maps:
+  endpoint: 'https://wid-maps.worldichneumonidae.workers.dev'
+
+# Base layers for every map on the site (the first is the default; visitors can
+# switch with the layers button, and their choice is remembered).
 map_tiles:
-  - label: OpenStreetMap
+  - label: 'Light'
+    server: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+    attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'
+    maxNativeZoom: 16
+  - label: 'Streets'
+    server: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    server: https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png
-  - label: GBIF
-    attribution: '&copy; <a href="https://gbif.org">Basemap from GBIF</a>'
-    server: https://tile.gbif.org/3857/omt/{z}/{x}/{y}{r}.png?style=gbif-natural-en
-    zoomOffset: -1
-    tileSize: 512
-    minZoom: 1
-    maxZoom: 18
-    dpr:
-      1: '@1x'
+  - label: 'Terrain'
+    server: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'
+    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Style &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)'
+    maxNativeZoom: 17
+  - label: 'Satellite'
+    server: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
