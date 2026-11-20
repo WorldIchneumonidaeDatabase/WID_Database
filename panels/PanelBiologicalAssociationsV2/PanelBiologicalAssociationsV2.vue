@@ -1,10 +1,11 @@
 <template>
-  <VCard>
+  <!-- the full record details (images, areas, specimens); hidden when this taxon has none of its own -->
+  <VCard v-if="isLoading || biologicalAssociations.length">
     <ClientOnly>
       <VSpinner v-if="isLoading" />
     </ClientOnly>
     <VCardHeader>
-      Biological associations ({{ Number(pagination.total) || 0 }})
+      All details ({{ Number(pagination.total) || 0 }})
     </VCardHeader>
     <VCardContent class="min-h-[6rem] overflow-x-auto">
       <VPagination

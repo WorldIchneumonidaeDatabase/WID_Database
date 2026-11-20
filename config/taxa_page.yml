@@ -9,6 +9,7 @@ taxa_page:
 
         - - panel:map-v2
         # - panel:map
+          - panel:associations-summary
           - panel:descendants
           - panel:scrutiny
           - panel:content
@@ -16,8 +17,7 @@ taxa_page:
           - panel:etymology
           - panel:gbif
           - panel:statistics
-          
-      - - - panel:biological-associations-v2
+
   specimen_records:
     label: 'Specimen & Occurrence Records'
     # No rank_group restriction — experimentally enabled for every rank (see
@@ -36,6 +36,11 @@ taxa_page:
     rank_group: ['SpeciesGroup']
     panels:
       - - - panel:field-occurrences
+  biological_associations:
+    label: 'Biological associations'
+    panels:
+      - - - panel:associations-explorer
+          - panel:biological-associations-v2
   inaturalist:
     label: 'iNaturalist'
     panels:
