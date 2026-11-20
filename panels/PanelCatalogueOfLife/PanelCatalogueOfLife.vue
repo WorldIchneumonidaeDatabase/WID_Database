@@ -88,9 +88,8 @@
           class="col-syn"
         >
           <p class="col-syn-sum">
-            <span>Synonyms:</span> <strong>{{ syn.colCount }}</strong> <span>in COL,</span>
-            <strong>{{ syn.widCount }}</strong> <span>in WID</span>
-            <template v-if="!syn.onlyCol.length && !syn.onlyWid.length && !syn.yearDiff.length"><span> · </span><span>the same names</span></template>
+            <span class="mr-1">Synonyms:</span><strong class="mr-1">{{ syn.colCount }}</strong><span class="mr-1">in COL,</span><strong class="mr-1">{{ syn.widCount }}</strong><span>in WID</span>
+            <template v-if="!syn.onlyCol.length && !syn.onlyWid.length && !syn.yearDiff.length"><span class="mx-1">·</span><span>the same names</span></template>
           </p>
           <details v-if="syn.onlyCol.length">
             <summary>
@@ -131,7 +130,7 @@
         </div>
 
         <p class="col-source">
-          <span>{{ release }}</span><span>, from </span><span>{{ col.source || '—' }}</span>
+          <span>{{ release }}</span><span class="mr-1">, from</span><span>{{ col.source || '—' }}</span>
         </p>
       </template>
     </VCardContent>

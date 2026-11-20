@@ -8,6 +8,7 @@
     </a>
     <div class="flex flex-col flex-grow">
       <LayoutHeader />
+      <ReleaseBanner />
       <main id="main-content">
         <slot />
       </main>
@@ -18,4 +19,5 @@
 <script setup>
 import LayoutHeader from '@/components/Layout/LayoutHeader.vue'
 import LayoutFooter from '@/components/Layout/LayoutFooter.vue'
+import ReleaseBanner from '../../pages/components/Releases/ReleaseBanner.vue'
 </script>

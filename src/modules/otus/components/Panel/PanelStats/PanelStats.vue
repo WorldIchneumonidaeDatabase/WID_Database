@@ -6,7 +6,7 @@
       legend=""
     />
     <VCardHeader class="flex justify-between">
-      <h2 class="text-md">Stats</h2>
+      <h2 class="text-md">Names by rank</h2>
       <PanelDropdown
         panel-key="taxonomy"
         :menu-options="menuOptions"
@@ -16,107 +16,104 @@
       class="text-sm overflow-auto"
       tabindex="0"
     >
-      <VTable>
+      <table class="st-table">
         <caption class="sr-only">
-          Summary of taxonomic names by rank, showing valid extant names, fossil
-          names, invalid names, and total counts.
+          Summary of taxonomic names by rank, showing valid extant names, fossil names, invalid names, and total counts.
         </caption>
-
-        <VTableHeader>
-          <VTableHeaderRow>
-            <VTableHeaderCell scope="col"> Taxon </VTableHeaderCell>
-            <VTableHeaderCell
+        <thead>
+          <tr>
+            <th scope="col">Rank</th>
+            <th
+              scope="col"
+              class="st-barcol"
+              aria-hidden="true"
+            />
+            <th
               v-if="isAdvancedView"
               scope="col"
+              class="st-num"
               title="OTUs linked to valid protonyms"
             >
               Taxa
-            </VTableHeaderCell>
-
-            <VTableHeaderCell
-              title="Taxon names"
-              class="border-l border-r border-base-border"
-              colspan="2"
-              scope="colgroup"
-            >
-              Valid names
-            </VTableHeaderCell>
-
-            <VTableHeaderCell
-              colspan="3"
-              scope="colgroup"
-              class="bg-base-foreground"
-              aria-hidden="true"
-            />
-          </VTableHeaderRow>
-
-          <VTableHeaderRow>
-            <VTableHeaderCell scope="col"> Rank </VTableHeaderCell>
-            <VTableHeaderCell
-              v-if="isAdvancedView"
-              title="OTUs linked to valid protonyms"
+            </th>
+            <th
               scope="col"
+              class="st-num st-h st-h-valid"
             >
-              Total
-            </VTableHeaderCell>
-            <VTableHeaderCell
-              class="border-l border-base-border"
+              Valid
+            </th>
+            <th
+              v-if="hasFossils"
               scope="col"
+              class="st-num st-h st-h-fossil"
             >
-              Extant
-            </VTableHeaderCell>
-            <VTableHeaderCell scope="col"> Fossil </VTableHeaderCell>
-            <VTableHeaderCell
-              class="border-l border-base-border"
+              Fossil
+            </th>
+            <th
               scope="col"
+              class="st-num st-h st-h-invalid"
             >
               Invalid
-            </VTableHeaderCell>
-
-            <VTableHeaderCell
-              title="Taxon names"
-              class="border-l border-base-border"
+            </th>
+            <th
               scope="col"
+              class="st-num"
             >
               Total
-            </VTableHeaderCell>
-          </VTableHeaderRow>
-        </VTableHeader>
-
-        <VTableBody>
-          <VTableBodyRow
-            v-for="{ rank, taxa, names } in store.catalog.stats"
-            :key="rank"
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="r in rows"
+            :key="r.rank"
           >
-            <VTableHeaderCell
-              class="capitalize"
+            <th
               scope="row"
+              class="st-rank"
             >
-              {{ rank }}
-            </VTableHeaderCell>
-
-            <VTableBodyCell v-if="isAdvancedView">
-              {{ taxa }}
-            </VTableBodyCell>
-
-            <VTableBodyCell class="border-l border-base-border">
-              {{ names.valid_extant }}
-            </VTableBodyCell>
-
-            <VTableBodyCell>
-              {{ names.valid_fossil }}
-            </VTableBodyCell>
-
-            <VTableBodyCell class="border-l border-base-border">
-              {{ names.invalid }}
-            </VTableBodyCell>
-
-            <VTableBodyCell class="border-l border-base-border">
-              {{ names.invalid + names.valid }}
-            </VTableBodyCell>
-          </VTableBodyRow>
-        </VTableBody>
-      </VTable>
+              {{ r.rank }}
+            </th>
+            <td
+              class="st-barcol"
+              aria-hidden="true"
+            >
+              <span class="st-bar">
+                <span
+                  v-if="r.extant"
+                  class="st-valid"
+                  :style="{ flexGrow: r.extant }"
+                />
+                <span
+                  v-if="r.fossil"
+                  class="st-fossil"
+                  :style="{ flexGrow: r.fossil }"
+                />
+                <span
+                  v-if="r.invalid"
+                  class="st-invalid"
+                  :style="{ flexGrow: r.invalid }"
+                />
+              </span>
+            </td>
+            <td
+              v-if="isAdvancedView"
+              class="st-num"
+            >
+              {{ fmt(r.taxa) }}
+            </td>
+            <td class="st-num st-strong">{{ fmt(r.extant) }}</td>
+            <td
+              v-if="hasFossils"
+              class="st-num"
+            >
+              {{ fmt(r.fossil) }}
+            </td>
+            <td class="st-num">{{ fmt(r.invalid) }}</td>
+            <td class="st-num st-total">{{ fmt(r.total) }}</td>
+          </tr>
+        </tbody>
+      </table>
     </VCardContent>
   </VCard>
 </template>
@@ -125,6 +122,7 @@
 import { computed, ref } from 'vue'
 import { useOtuStore } from '@/modules/otus/store/store'
 import PanelDropdown from '../PanelDropdown.vue'
+import { locale } from '@/i18n/index.js'
 
 const props = defineProps({
   otuId: {
@@ -149,6 +147,19 @@ const props = defineProps({
 })
 
 const store = useOtuStore()
+const fmt = (n) => Number(n || 0).toLocaleString(locale.value || 'en')
+
+const rows = computed(() =>
+  Object.values(store.catalog.stats || {}).map(({ rank, taxa, names = {} }) => ({
+    rank,
+    taxa,
+    extant: names.valid_extant || 0,
+    fossil: names.valid_fossil || 0,
+    invalid: names.invalid || 0,
+    total: (names.valid || 0) + (names.invalid || 0)
+  }))
+)
+const hasFossils = computed(() => rows.value.some((r) => r.fossil))
 const isAdvancedView = ref(false)
 
 const menuOptions = computed(() => [
@@ -158,3 +169,95 @@ const menuOptions = computed(() => [
   }
 ])
 </script>
+
+<style scoped>
+.st-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.st-table th,
+.st-table td {
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(var(--color-base-muted), 0.9);
+}
+.st-table thead th {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+.st-table tbody tr:last-child th,
+.st-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.st-rank {
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.st-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.st-strong {
+  font-weight: 700;
+  color: rgb(var(--color-primary));
+}
+.st-total {
+  font-weight: 600;
+}
+.st-barcol {
+  width: 40%;
+  min-width: 5rem;
+}
+.st-bar {
+  display: flex;
+  height: 0.5rem;
+  gap: 2px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(var(--color-base-muted), 0.5);
+}
+.st-bar span {
+  min-width: 4px;
+}
+.st-h::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.3rem;
+  border-radius: 999px;
+  vertical-align: 1px;
+}
+.st-h-valid::before {
+  background: rgb(var(--color-primary));
+}
+.st-h-fossil::before {
+  background: rgb(130, 70, 180);
+}
+.st-h-invalid::before {
+  background: rgb(var(--color-secondary));
+}
+.st-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.3rem;
+  border-radius: 999px;
+  vertical-align: 1px;
+}
+.st-valid {
+  background: rgb(var(--color-primary));
+}
+.st-fossil {
+  background: rgb(130, 70, 180);
+}
+.st-invalid {
+  background: rgb(var(--color-secondary));
+}
+</style>

@@ -33,7 +33,7 @@
           v-if="match.synonymOf"
           class="gb-note"
         >
-          <span>GBIF treats this name as a synonym of </span>
+          <span class="mr-1">GBIF treats this name as a synonym of</span>
           <a
             :href="links.accepted"
             target="_blank"
@@ -115,14 +115,18 @@
               v-for="(c, i) in topCountries"
               :key="c.code"
             >
-              <span v-if="i">, </span>
+              <span
+                v-if="i"
+                class="mr-1"
+                >,</span
+              >
               <a
                 :href="`${links.records}&country=${c.code}`"
                 target="_blank"
                 rel="noopener"
                 >{{ c.name }}</a
               >
-              <span class="opacity-60"> {{ fmt(c.count) }}</span>
+              <span class="opacity-60 ml-1">{{ fmt(c.count) }}</span>
             </template>
           </p>
 
@@ -132,7 +136,7 @@
                 :href="`${links.records}&media_type=StillImage`"
                 target="_blank"
                 rel="noopener"
-                ><strong>{{ fmt(counts.images) }}</strong> <span>with images</span></a
+                ><strong class="mr-1">{{ fmt(counts.images) }}</strong><span>with images</span></a
               >
             </li>
             <li v-if="counts.types">
@@ -140,7 +144,7 @@
                 :href="`${links.records}&type_status=*`"
                 target="_blank"
                 rel="noopener"
-                ><strong>{{ fmt(counts.types) }}</strong> <span>type specimens</span></a
+                ><strong class="mr-1">{{ fmt(counts.types) }}</strong><span>type specimens</span></a
               >
             </li>
           </ul>
@@ -202,16 +206,18 @@ const links = computed(() => {
   }
 })
 
-const basis = computed(() =>
-  (facets.value.BASIS_OF_RECORD || [])
-    .map((f) => ({
-      key: f.name,
-      count: f.count,
-      label: BASIS[f.name]?.label || 'Other',
-      color: BASIS[f.name]?.color || 'rgb(180, 185, 195)'
-    }))
-    .filter((b) => b.count)
-)
+// kinds of records; the ones without a label of their own are merged into "Other"
+const basis = computed(() => {
+  const out = []
+  let other = 0
+  for (const f of facets.value.BASIS_OF_RECORD || []) {
+    if (!f.count) continue
+    if (BASIS[f.name]) out.push({ key: f.name, count: f.count, label: BASIS[f.name].label, color: BASIS[f.name].color })
+    else other += f.count
+  }
+  if (other) out.push({ key: 'OTHER', count: other, label: 'Other', color: 'rgb(180, 185, 195)' })
+  return out
+})
 
 const topCountries = computed(() => {
   let names

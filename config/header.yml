@@ -40,6 +40,8 @@
       submenu:
         - label: How to Cite
           link: /cite
+        - label: Data releases
+          link: /releases
         - label: How to Help
           link: /help
         - label: How to Request a PDF

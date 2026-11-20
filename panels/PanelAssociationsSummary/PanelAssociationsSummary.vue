@@ -76,8 +76,7 @@
             v-for="a in associates.slice(0, 4)"
             :key="a.text"
           >
-            <span class="opacity-70">{{ a.relationship }}</span>
-            <span> </span>
+            <span class="opacity-70 mr-1">{{ a.relationship }}</span>
             <span
               class="[&_i]:italic"
               v-html="a.html"

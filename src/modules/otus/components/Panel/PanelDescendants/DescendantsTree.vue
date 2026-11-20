@@ -9,7 +9,7 @@
       class="absolute -left-2.5"
     />
     <router-link
-      class="text-primary-500"
+      class="ds-name"
       :to="{ name: 'otus-id', params: { id: taxonomy.otu_id } }"
       v-html="taxonomy.name"
     />
@@ -83,6 +83,14 @@ const loadDescendants = () => {
 </script>
 
 <style lang="scss" scoped>
+.ds-name {
+  font-weight: 600;
+  color: rgb(var(--color-primary));
+}
+.ds-name:hover {
+  text-decoration: underline;
+}
+
 .tree {
   list-style: none;
   margin: 0;
@@ -96,7 +104,7 @@ const loadDescendants = () => {
     position: relative;
     margin: 0;
     padding: 0px 6px;
-    border-left: 1px solid rgb(100, 100, 100);
+    border-left: 1px solid rgb(var(--color-base-border));
   }
 
   li:last-child {
@@ -109,14 +117,14 @@ const loadDescendants = () => {
     height: 1em;
     width: 12px;
     color: white;
-    border-bottom: 1px solid rgb(100, 100, 100);
+    border-bottom: 1px solid rgb(var(--color-base-border));
     content: '';
     display: inline-block;
     left: -6px;
   }
 
   li:last-child:before {
-    border-left: 1px solid rgb(100, 100, 100);
+    border-left: 1px solid rgb(var(--color-base-border));
   }
 }
 </style>

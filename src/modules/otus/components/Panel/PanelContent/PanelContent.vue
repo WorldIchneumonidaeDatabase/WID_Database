@@ -1,5 +1,5 @@
 <template>
-  <VCard v-if="contents.length">
+  <VCard v-if="contents.length" class="overflow-hidden">
     <ContentTopic
       v-for="(text, title) in contentList"
       :key="title"
